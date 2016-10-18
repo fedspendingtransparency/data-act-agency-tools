@@ -1,0 +1,139 @@
+REPLACE PROCEDURE GTAS.SF133_SP ()
+BEGIN
+  DECLARE RECDATA             CHAR(200);
+  DECLARE RECORD_CNT           INTEGER;
+  DECLARE RECNUM              INTEGER;
+  DECLARE RECOUT              CHAR(200);
+  DECLARE FLAG                CHAR(01);
+  DECLARE TAS_BEGIN           INTEGER;
+  DECLARE TAS_FLAG            CHAR(01);
+  DECLARE TAS_SP              CHAR(02);
+  DECLARE TAS_ATA             CHAR(03);
+  DECLARE TAS_AID             CHAR(03);
+  DECLARE TAS_BPOA            CHAR(04);
+  DECLARE TAS_EPOA            CHAR(04);
+  DECLARE TAS_A               CHAR(01);
+  DECLARE TAS_MAIN            CHAR(04);
+  DECLARE TAS_SUB             CHAR(03);
+  DECLARE TAS_END             INTEGER;
+  DECLARE TAS_X               INTEGER;
+  DECLARE ATA_FLAG            CHAR(01);
+  DECLARE GL_ACCT             CHAR(04);
+  DECLARE GL_AMT              DECIMAL(14,2);
+  DECLARE GL_FLAG             CHAR(01);
+  DECLARE X                   INTEGER;
+  DECLARE CHAR_AMT            CHAR(20);
+  DECLARE AMT_CHAR1           CHAR(01);
+  DECLARE NEG_FLAG            CHAR(01);
+  DECLARE HOLD_AMT            CHAR(20);
+
+  DECLARE C1_CURSOR CURSOR FOR
+    SELECT *
+      FROM GTAS.TMP_SF133
+     ORDER BY 1;
+
+  SET TAS_SP = ' ';
+  SET TAS_ATA = ' ';
+  SET TAS_AID = ' ';
+  SET TAS_BPOA = ' ';
+  SET TAS_EPOA = ' ';
+  SET TAS_A = ' ';
+  SET TAS_MAIN = ' ';
+  SET TAS_SUB = ' ';
+
+  DELETE FROM GTAS.TMP_SF133_NEW;
+
+  OPEN C1_CURSOR;
+  SET FLAG = 'Y';
+  SET RECORD_CNT = 0;
+  INSERT INTO GTAS.TMP_SF133_NEW (RECID,RECLINE)
+  VALUES (:RECORD_CNT,'BEGIN OF FILE');
+  LOOP1:
+  WHILE FLAG = 'Y'
+  DO
+    SET RECORD_CNT = RECORD_CNT + 1;
+    FETCH FROM C1_CURSOR INTO RECNUM,RECDATA;
+    IF SQLCODE <> 0 THEN
+       SET FLAG = 'N';
+       LEAVE LOOP1;
+    END IF;
+    SET TAS_BEGIN = POSITION('TAS:' IN RECDATA);
+
+    IF TAS_BEGIN > 0 THEN 
+       SET TAS_FLAG = 'Y';
+       SET TAS_END   = POSITION(' ' IN SUBSTR(RECDATA,13));
+       SET TAS_X     = POSITION('X' IN SUBSTR(RECDATA,13,TAS_END+13));
+       SET ATA_FLAG =  SUBSTR(RECDATA,TAS_BEGIN+12,1);
+       SET TAS_SP    = ' ';
+       SET TAS_AID   = SUBSTR(RECDATA,TAS_BEGIN + 5,3);
+       SET TAS_BPOA  = SUBSTR(RECDATA,TAS_BEGIN + 13,4);
+       SET TAS_EPOA  = SUBSTR(RECDATA,TAS_BEGIN + 17,4);
+       IF TAS_X > 0 THEN
+          SET TAS_A = 'X';
+          SET TAS_BPOA = ' ';
+          SET TAS_EPOA = ' ';
+       ELSE
+          SET TAS_A = ' ';
+          SET TAS_EPOA = SUBSTR(RECDATA,TAS_END -14 + 13,4);
+          SET TAS_BPOA = SUBSTR(RECDATA,TAS_END -19 + 13,4);
+       END IF;
+       IF ATA_FLAG = '-' THEN
+          SET TAS_ATA = SUBSTR(RECDATA,TAS_BEGIN + 9,3);
+       ELSE
+          SET TAS_ATA = ' ';
+       END IF;
+       SET TAS_MAIN  = SUBSTR(RECDATA,TAS_END - 9 + 13,4);
+       SET TAS_SUB   = SUBSTR(RECDATA,TAS_END - 4 + 13,3);
+    ELSE
+       SET GL_ACCT = SUBSTR(RECDATA,5,4);
+       IF GL_ACCT >= '0000' AND GL_ACCT <= '9999' AND LENGTH(TRIM(GL_ACCT)) = 4 THEN
+          SET TAS_FLAG = 'G';
+          SET X = 0;
+          SET CHAR_AMT = '';
+          SET NEG_FLAG = 'N';
+          LOOP2:
+            WHILE X < 20
+              DO
+                SET X = X +1;
+                SET AMT_CHAR1 = SUBSTR(RECDATA,(LENGTH(TRIM(RECDATA)) -15) +X,1);
+                IF (AMT_CHAR1 >= '0' AND AMT_CHAR1 <= '9') THEN
+                  SET CHAR_AMT = TRIM(CHAR_AMT) || AMT_CHAR1;
+                END IF;
+                IF AMT_CHAR1 = ')' THEN
+                   SET NEG_FLAG = 'Y';
+                END IF;
+            END WHILE LOOP2;
+            SET HOLD_AMT = SUBSTR(RECDATA,(LENGTH(TRIM(RECDATA)) - 20),20);
+            IF NEG_FLAG = 'Y' THEN
+               SET GL_AMT = (CAST(CHAR_AMT AS DECIMAL(14,2)) / 100) *-1;
+            ELSE
+               SET GL_AMT = CAST(CHAR_AMT AS DECIMAL(14,2)) / 100;
+            END IF;
+       ELSE
+          SET GL_ACCT = ' ';
+          SET GL_AMT = 0;
+          SET TAS_FLAG = 'N';
+       END IF;
+    END IF;
+
+    INSERT INTO GTAS.TMP_SF133_NEW 
+/*     VALUES (:RECNUM,TRIM(:RECDATA)||' +'||SUBSTR(:RECDATA,5,4)||'+'||LENGTH(TRIM(:RECDATA))||'+'||SUBSTR(:RECDATA,LENGTH(TRIM(:RECDATA))-20,20)*/
+     VALUES (:RECNUM,TRIM(:RECDATA)||' +'||SUBSTR(:RECDATA,5,4)||'+'||LENGTH(TRIM(:RECDATA))||'+'||:CHAR_AMT||'+'||:HOLD_AMT
+            ,:TAS_SP
+            ,:TAS_ATA
+            ,:TAS_AID
+            ,:TAS_BPOA
+            ,:TAS_EPOA
+            ,:TAS_A
+            ,:TAS_MAIN
+            ,:TAS_SUB
+            ,:TAS_FLAG
+            ,:GL_ACCT
+            ,:GL_AMT
+);
+  END WHILE LOOP1;
+CLOSE C1_CURSOR;
+INSERT INTO GTAS.TMP_SF133_NEW (RECID,RECLINE)
+VALUES (:RECORD_CNT,'END OF FILE');
+
+END;

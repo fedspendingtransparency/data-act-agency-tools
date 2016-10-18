@@ -1,0 +1,25 @@
+select tas_sp
+,tas_ata AS A51A
+,tas_aid AS A51B
+,tas_bpoa AS A51C
+,tas_epoa AS A51D
+,tas_a AS A51E
+,tas_main AS A51F
+,tas_sub AS A51G
+,sum(case when GL_acct = '1000' then gl_amount else 0 end)  as A52a_fyb
+,sum(case when gl_acct >= '1010' and gl_acct <= '1042' then gl_amount else 0 end) as A52B_CPE
+,sum(case when gl_acct in ( '1160','1180','1260','1280') then gl_amount else 0 end) as A52_CPE
+,sum(case when gl_acct in ('1340','1440') then gl_amount else 0 end) as A55B_CPE
+,sum(case when gl_acct in ('1540','1640') then gl_amount else 0 end) as A55A_CPE
+,sum(case when gl_acct in ('1750','1850') then gl_amount else 0 end) as A55C_CPE
+,sum(case when gl_acct in ('1340','1440','1540','1640','1750','1850') then gl_amount else 0 end) as A55_CPE
+,sum(case when gl_acct in ('1910') then gl_amount else 0 end) as A52_55_CPE
+,sum(case when gl_acct in ('3020') then gl_amount else 0 end) as A57_CPE
+,sum(case when gl_acct in ('2190') then gl_amount else 0 end) as A53_57_CPE
+,sum(case when gl_acct in ('1021','1081','1033','1093') then gl_amount else 0 end) as A54A_CPE
+,sum(case when gl_acct in ('2490') then gl_amount else 0 end) as A54_CPE
+,sum(case when gl_acct in ('2500') then gl_amount else 0 end) as A53_54_57_CPE
+from gtas.tmp_sf133_new
+where TAS_REC_FLAG = 'G'
+group by 1,2,3,4,5,6,7,8
+order by 1,2,3,4,5,6,7,8;
